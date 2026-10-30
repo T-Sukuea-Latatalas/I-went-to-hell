@@ -8,6 +8,7 @@ class Enemy {
     this.vy = 0;
     this.isDead = false;
     this.removeMe = false;
+    this.isGrounded = false;
   }
 
   defeat() {
@@ -22,32 +23,47 @@ class Enemy {
 class SlimeEnemy extends Enemy {
   constructor(tileX, tileY, range = 4) {
     super(tileX, tileY);
-    this.direction = -1;
+    this.direction = -1; // -1: 左, 1: 右
     this.speed = PHYSICS.ENEMY_SPEED;
     this.startX = this.x;
     this.maxPatrolDistance = range * TILE_SIZE;
+    this.wasGrounded = false; // 着地検出用
   }
 
   update(tileMap) {
     if (this.isDead) return;
 
+    // 水平方向速度と重力加速度の設定
     this.vx = this.direction * this.speed;
     this.vy += PHYSICS.GRAVITY;
     if (this.vy > PHYSICS.MAX_FALL_SPEED) {
       this.vy = PHYSICS.MAX_FALL_SPEED;
     }
 
-    const prevX = this.x;
-
+    // 地形衝突解決
     Physics.collideAndMoveX(this, tileMap);
     Physics.collideAndMoveY(this, tileMap);
 
-    if (Math.abs(this.x - prevX) < 0.05) {
-      this.direction *= -1;
+    // 1. 空中から地面に着地した瞬間を検知
+    if (this.isGrounded && !this.wasGrounded) {
+      // 着地地点を新たなパトロール原点として設定
+      this.startX = this.x;
     }
+    this.wasGrounded = this.isGrounded;
 
-    if (Math.abs(this.x - this.startX) > this.maxPatrolDistance) {
-      this.direction = this.x > this.startX ? -1 : 1;
+    // 2. 地面に接地している場合のみ反転判定を実行（空中での誤判定・振動を防止）
+    if (this.isGrounded) {
+      // 壁衝突判定: collideAndMoveX で壁に衝突し速度が 0 にリセットされた場合
+      if (this.vx === 0) {
+        this.direction *= -1;
+        this.startX = this.x; // 壁から反対方向へ新しくパトロール開始
+      }
+      // パトロール上限判定: 進行方向に対して上限を超えた場合のみ反転
+      else if (this.direction > 0 && this.x >= this.startX + this.maxPatrolDistance) {
+        this.direction = -1;
+      } else if (this.direction < 0 && this.x <= this.startX - this.maxPatrolDistance) {
+        this.direction = 1;
+      }
     }
   }
 
